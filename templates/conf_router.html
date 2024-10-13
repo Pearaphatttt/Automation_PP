@@ -22,9 +22,9 @@
                 <option value="{{ interface }}">{{ interface }}</option>
                 {% endfor %}
             </select>
-            <label for="ip_address">Address:</label>
+            <h2>address</h2>
             <input type="text" id="ip_address" name="ip_address" placeholder="IP Address" required>
-            <label for="subnet_mask">Subnet Mask:</label>
+            <h2>subnetmask</h2>
             <input type="text" id="subnet_mask" name="subnet_mask" placeholder="SUBNET MASK" required>
             <button type="submit">Apply IP Address</button>
         </form>
@@ -39,14 +39,18 @@
             </select>
             <button type="submit">Remove IP Address</button>
         </form>
+        <br>
+        <form method="POST" action="{{ url_for('show_interfaces_router') }}">
+            <button type="submit">Show IP Interfaces</button>
+        </form>
 
         <!-- ส่วนสำหรับแสดงผลลัพธ์ -->
-        {% if output %}
+    <div class="output-container">
         <div class="output-box">
             <h2>Output:</h2>
             <pre>{{ output }}</pre>
         </div>
-        {% endif %}
+    </div>
         <br>
         <form method="GET" action="{{ url_for('command_center') }}">
             <button type="submit">Back</button>

@@ -20,7 +20,6 @@
             <div class="form-item">
                 <form method="POST" action="{{ url_for('apply_switch_interface_config') }}">
                     <h2>Add IP Interface </h2>
-                    <label for="interface">Interface:</label>
                     <select id="interface" name="interface" required>
                         <option value="" disabled selected>Select Interface</option>
                         {% for interface in interfaces %}
@@ -39,7 +38,6 @@
                     <h2>Add VLAN</h2>
                     <input type="text" name="vlan_id" placeholder="VLAN ID" required>
                     <input type="text" name="vlan_name" placeholder="VLAN Name" required>
-                    <label for="interface">Interface:</label>
                     <select id="interface" name="interface" required>
                         <option value="" disabled selected>Select Interface</option>
                         {% for interface in interfaces %}
@@ -73,7 +71,6 @@
             <div class="form-item">
                 <form method="POST" action="{{ url_for('remove_switch_ip_interface') }}">
                     <h2>Remove IP Interface</h2>
-                    <label for="interface">Interface:</label>
                     <select id="interface" name="interface" required>
                         <option value="" disabled selected>Select Interface</option>
                         {% for interface in interfaces %}
@@ -86,7 +83,7 @@
 
             <div class="form-item">
                 <form method="POST" action="{{ url_for('remove_vlan') }}">
-                    <label for="vlan_id">VLAN ID:</label>
+                    <h2>Remove Vlan</h2>
                     <select id="vlan_id" name="vlan_id" required>
                         <option value="" disabled selected>Select VLAN ID</option>
                         {% for vlan_id in vlan_ids %}
@@ -119,7 +116,7 @@
         <div class="output-container">
             <div class="output-box">
                 <h2>Output:</h2>
-                <pre>{{ combined_output }}</pre>
+                <pre>{{ output }}</pre>
             </div>
         </div>
     </div>

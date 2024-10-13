@@ -379,11 +379,13 @@ def apply_router_interface_config():
     
     commands = [
         f"interface {interface}",
+        "no ip address",  # ลบ IP เดิม (ถ้ามี)
         f"ip address {ip_address} {subnet_mask}",
         "no shutdown",
-        "exit"
+        "exit",
     ]
     try:
+        interfaces = get_interfaces() 
         hostname = get_hostname()
         print(f"Hostname: {hostname}")  # แสดง hostname ใน console
     except Exception as e:
@@ -391,7 +393,7 @@ def apply_router_interface_config():
     try:
         output = net_connect.send_config_set(commands)
         prompt = net_connect.find_prompt()
-        return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname)
+        return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname,interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Applying Router Interface Config</h1><p>{str(e)}</p>'
 
@@ -414,6 +416,7 @@ def apply_switch_interface_config():
         "exit"
     ]
     try:
+        interfaces = get_interfaces() 
         hostname = get_hostname()
         print(f"Hostname: {hostname}")  # แสดง hostname ใน console
     except Exception as e:
@@ -421,9 +424,8 @@ def apply_switch_interface_config():
 
     try:
         output = net_connect.send_config_set(commands)
-        output += "\n" + net_connect.send_command(f"show ip interface brief | include {interface}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname,interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Applying Switch Interface Config</h1><p>{str(e)}</p>'
 
@@ -444,14 +446,14 @@ def remove_router_ip_interface():
     ]
     try:
         hostname = get_hostname()
+        interfaces = get_interfaces() 
         print(f"Hostname: {hostname}")  # แสดง hostname ใน console
     except Exception as e:
         print(f"Error: {e}")  # แสดง error ถ้ามี
     try:
         output = net_connect.send_config_set(commands)
-        output += "\n" + net_connect.send_command(f"show ip interface brief | include {interface}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_router.html', output=output, prompt=prompt,hostname=hostname)
+        return render_template('conf_router.html', output=output, prompt=prompt,hostname=hostname,interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Removing Router IP Address</h1><p>{str(e)}</p>'
 
@@ -590,12 +592,10 @@ def add_vlan():
     try:
         # ส่งคำสั่งสำหรับเพิ่ม VLAN
         net_connect.send_config_set(commands)
-
-        # หลังจากเพิ่ม VLAN สำเร็จแล้วให้เรียกดู VLAN
-        vlan_brief_output = net_connect.send_command("show vlan brief")
-
+        output = net_connect.send_config_set(commands)
+        output += net_connect.send_command(f"show vlan brief | include {vlan_id}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', vlan_brief_output=vlan_brief_output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Adding VLAN</h1><p>{str(e)}</p>'
 
@@ -622,7 +622,7 @@ def remove_vlan():
         output = net_connect.send_config_set(commands)
         output += net_connect.send_command(f"show vlan brief")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', vlan_brief_output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Remove Vlan</h1><p>{str(e)}</p>'
 
@@ -653,7 +653,7 @@ def add_ip_vlan():
         output = net_connect.send_config_set(commands)
         output += net_connect.send_command(f"show ip interface brief | include Vlan{vlan_id}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', vlan_brief_output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Adding IP to VLAN</h1><p>{str(e)}</p>'
 
@@ -683,7 +683,7 @@ def add_port_to_vlan():
         output = net_connect.send_config_set(commands)
         output += net_connect.send_command(f"show vlan brief | include {vlan_id}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', vlan_brief_output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Adding Port to VLAN</h1><p>{str(e)}</p>'
 
@@ -705,7 +705,7 @@ def show_vlans():
         output = net_connect.send_command('show vlan brief')
         prompt = net_connect.find_prompt()
         # ส่งผลลัพธ์ไปยังหน้า conf_switch.html และใช้ตัวแปร combined_output
-        return render_template('conf_switch.html', combined_output=output, prompt=prompt,hostname=hostname, interfaces=interfaces,vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces,vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Showing VLANs</h1><p>{str(e)}</p>'
 
@@ -727,7 +727,27 @@ def show_interfaces_switch():
         output = net_connect.send_command('show ip interface brief')
         prompt = net_connect.find_prompt()
         # ส่งผลลัพธ์ไปยังหน้า conf_switch.html และใช้ตัวแปร combined_output
-        return render_template('conf_switch.html', combined_output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+    except Exception as e:
+        return f'<h1>Error Showing Interfaces</h1><p>{str(e)}</p>'
+
+@app.route('/show_interfaces_router', methods=['POST'])
+def show_interfaces_router():
+    global net_connect
+    if not net_connect:
+        return '<h1>Not connected</h1>'
+    try:
+        hostname = get_hostname()
+        interfaces = get_interfaces() 
+        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+    except Exception as e:
+        print(f"Error: {e}")  # แสดง error ถ้ามี
+    try:
+        # ส่งคำสั่ง 'show interfaces' ไปยังอุปกรณ์
+        output = net_connect.send_command('show ip interface brief')
+        prompt = net_connect.find_prompt()
+        # ส่งผลลัพธ์ไปยังหน้า con_router.html และใช้ตัวแปร combined_output
+        return render_template('conf_router.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Showing Interfaces</h1><p>{str(e)}</p>'
 
