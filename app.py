@@ -5,16 +5,22 @@ import threading
 
 app = Flask(__name__)
 
-# เก็บข้อมูลการเชื่อมต่อ SSH
+# ตัวแปร global สำหรับเก็บการเชื่อมต่อ SSH
 net_connect = None
 
 def get_hostname():
+    """
+    ฟังก์ชันสำหรับดึง hostname ของอุปกรณ์เครือข่าย
+    """
     global net_connect
     try:
+        # ส่งคำสั่ง 'show running-config' เพื่อดึงข้อมูลการตั้งค่าปัจจุบัน
         output = net_connect.send_command("show running-config")
         print("Output of show running-config:")
         print(output)  # แสดงผลลัพธ์ใน console
+
         lines = output.splitlines()
+        # หา line ที่มีคำว่า 'hostname' เพื่อดึงชื่อ hostname
         hostname_line = next((line for line in lines if line.startswith("hostname")), None)
         hostname = hostname_line.split()[-1] if hostname_line else "Unknown"
         return hostname
@@ -24,52 +30,70 @@ def get_hostname():
 
 @app.route('/', methods=['GET'])
 def index():
+    """
+    เส้นทางหลักของแอปพลิเคชัน แสดงหน้า index.html ซึ่งเป็นหน้าแรก
+    """
     return render_template('index.html')
 
 @app.route('/connect', methods=['POST'])
 def connect():
+    """
+    ฟังก์ชันสำหรับเชื่อมต่อกับอุปกรณ์เครือข่ายผ่าน SSH
+    รับข้อมูล IP, username และ password จากแบบฟอร์ม
+    """
     global net_connect
     ip = request.form['ip']
     username = request.form['username']
     password = request.form['password']
-    
+
+    # สร้างพารามิเตอร์การเชื่อมต่อ
     router = {
         'device_type': 'cisco_ios',
         'ip': ip,
         'username': username,
         'password': password,
-        'secret': password,
+        'secret': password,  # ใช้สำหรับเข้าสู่โหมด enable
     }
 
     try:
+        # เชื่อมต่อกับอุปกรณ์
         net_connect = ConnectHandler(**router)
-        net_connect.enable()
-        
-        # ดึง hostname จากเราเตอร์
-        hostname = get_hostname()  # เรียกใช้ฟังก์ชันนี้เพื่อดึง hostname
+        net_connect.enable()  # เข้าสู่โหมด enable
+
+        # ดึง hostname จากอุปกรณ์
+        hostname = get_hostname()
         prompt = net_connect.find_prompt()
 
-        # ส่ง hostname ไปยังหน้า command_center.html
+        # แสดงหน้า command_center.html พร้อมส่งค่า hostname และ prompt
         return render_template('command_center.html', output="", prompt=prompt, hostname=hostname)
     except Exception as e:
+        # แสดงข้อความ error ถ้าเชื่อมต่อไม่สำเร็จ
         return f'<h1>Error Connecting to Device: {str(e)}</h1>'
 
 @app.route('/run_command', methods=['POST'])
 def run_command():
+    """
+    ฟังก์ชันสำหรับรันคำสั่งที่ผู้ใช้กรอกผ่านเว็บอินเทอร์เฟซ
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    
+
     command = request.form['command']
     try:
+        # ส่งคำสั่งไปยังอุปกรณ์และรับผลลัพธ์
         output = net_connect.send_command(command)
         prompt = net_connect.find_prompt()
+        # แสดงผลลัพธ์ในหน้า command_center.html
         return render_template('command_center.html', output=output, prompt=prompt)
     except Exception as e:
         return f'<h1>Error Running Command</h1><p>{str(e)}</p>'
 
 @app.route('/show_version', methods=['POST'])
 def show_version():
+    """
+    ฟังก์ชันสำหรับแสดงข้อมูลเวอร์ชันของอุปกรณ์ (show version)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1><p>Please connect first.</p>'
@@ -77,47 +101,47 @@ def show_version():
     try:
         hostname = get_hostname()
         print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
 
-    try:
+        # ส่งคำสั่ง 'show version' และรับผลลัพธ์
         output = net_connect.send_command('show version')
         prompt = net_connect.find_prompt()
-        return render_template('show_commands.html', output=output, prompt=prompt,hostname=hostname)
+        # แสดงผลลัพธ์ในหน้า show_commands.html
+        return render_template('show_commands.html', output=output, prompt=prompt, hostname=hostname)
     except Exception as e:
         return f'<h1>Error Showing Version</h1><p>{str(e)}</p>'
 
+# ฟังก์ชันอื่นๆ ที่มีลักษณะคล้ายกันสำหรับรันคำสั่ง 'show' ต่างๆ
+
 @app.route('/show_running_config', methods=['POST'])
 def show_running_config():
+    """
+    ฟังก์ชันสำหรับแสดงการตั้งค่าปัจจุบันของอุปกรณ์ (show running-config)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    try:
+        print(f"Hostname: {hostname}")
         output = net_connect.send_command('show running-config')
         prompt = net_connect.find_prompt()
-        return render_template('show_commands.html', output=output, prompt=prompt,hostname=hostname)
+        return render_template('show_commands.html', output=output, prompt=prompt, hostname=hostname)
     except Exception as e:
         return f'<h1>Error Showing Running Config</h1><p>{str(e)}</p>'
 
 @app.route('/show_startup_config', methods=['POST'])
 def show_startup_config():
+    """
+    ฟังก์ชันสำหรับแสดงการตั้งค่าเมื่อเริ่มต้นของอุปกรณ์ (show startup-config)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
         output = net_connect.send_command('show startup-config')
         prompt = net_connect.find_prompt()
         return render_template('show_commands.html', output=output, prompt=prompt, hostname=hostname)
@@ -126,18 +150,16 @@ def show_startup_config():
 
 @app.route('/show_ip_interface_brief', methods=['POST'])
 def show_ip_interface_brief():
+    """
+    ฟังก์ชันสำหรับแสดงข้อมูลสรุปของอินเทอร์เฟซ IP (show ip interface brief)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
 
-    if not net_connect:
-        return redirect(url_for('index'))
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
         output = net_connect.send_command('show ip interface brief')
         prompt = net_connect.find_prompt()
         return render_template('show_commands.html', output=output, prompt=prompt, hostname=hostname)
@@ -146,17 +168,16 @@ def show_ip_interface_brief():
 
 @app.route('/show_interfaces', methods=['POST'])
 def show_interfaces():
+    """
+    ฟังก์ชันสำหรับแสดงรายละเอียดของอินเทอร์เฟซทั้งหมด (show interfaces)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    try:
+        print(f"Hostname: {hostname}")
         output = net_connect.send_command('show interfaces')
         prompt = net_connect.find_prompt()
         return render_template('show_commands.html', output=output, prompt=prompt, hostname=hostname)
@@ -165,118 +186,130 @@ def show_interfaces():
 
 @app.route('/show_ip_route', methods=['POST'])
 def show_ip_route():
+    """
+    ฟังก์ชันสำหรับแสดงตารางเส้นทาง IP (show ip route)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
         output = net_connect.send_command('show ip route')
         prompt = net_connect.find_prompt()
-        return render_template('show_commands.html', output=output, prompt=prompt,hostname=hostname)
+        return render_template('show_commands.html', output=output, prompt=prompt, hostname=hostname)
     except Exception as e:
         return f'<h1>Error Showing IP Route</h1><p>{str(e)}</p>'
 
-# เพิ่มคำสั่ง "show" ใหม่ที่เหลือ
+# ฟังก์ชันเพิ่มเติมสำหรับคำสั่ง 'show' อื่นๆ เช่น show_arp, show_protocols, show_clock, etc.
+
 @app.route('/show_arp', methods=['POST'])
 def show_arp():
+    """
+    ฟังก์ชันสำหรับแสดงตาราง ARP (show arp)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    output = net_connect.send_command('show arp')
     try:
+        output = net_connect.send_command('show arp')
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('show_commands.html', output=output, hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    return render_template('show_commands.html', output=output,hostname=hostname)
+        return f'<h1>Error Showing ARP</h1><p>{str(e)}</p>'
 
 @app.route('/show_protocols', methods=['POST'])
 def show_protocols():
+    """
+    ฟังก์ชันสำหรับแสดงข้อมูลโปรโตคอลที่ใช้งานอยู่ (show protocols)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        output = net_connect.send_command('show protocols')
+        return render_template('show_commands.html', output=output, hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    output = net_connect.send_command('show protocols')
-    return render_template('show_commands.html', output=output, hostname=hostname)
+        return f'<h1>Error Showing Protocols</h1><p>{str(e)}</p>'
 
 @app.route('/show_clock', methods=['POST'])
 def show_clock():
+    """
+    ฟังก์ชันสำหรับแสดงเวลาปัจจุบันของอุปกรณ์ (show clock)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    output = net_connect.send_command('show clock')
     try:
+        output = net_connect.send_command('show clock')
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('show_commands.html', output=output, hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    return render_template('show_commands.html', output=output, hostname=hostname)
+        return f'<h1>Error Showing Clock</h1><p>{str(e)}</p>'
 
 @app.route('/show_users', methods=['POST'])
 def show_users():
+    """
+    ฟังก์ชันสำหรับแสดงผู้ใช้ที่กำลังเชื่อมต่อกับอุปกรณ์ (show users)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    output = net_connect.send_command('show users')
-
     try:
+        output = net_connect.send_command('show users')
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('show_commands.html', output=output, hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    return render_template('show_commands.html', output=output, hostname=hostname)
+        return f'<h1>Error Showing Users</h1><p>{str(e)}</p>'
 
 @app.route('/show_history', methods=['POST'])
 def show_history():
+    """
+    ฟังก์ชันสำหรับแสดงประวัติคำสั่งที่รันก่อนหน้า (show history)
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    output = net_connect.send_command('show history')
-
     try:
+        output = net_connect.send_command('show history')
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('show_commands.html', output=output, hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    return render_template('show_commands.html', output=output,hostname=hostname)
+        return f'<h1>Error Showing History</h1><p>{str(e)}</p>'
 
 @app.route('/show_vlan_brief', methods=['POST'])
 def show_vlan_brief():
+    """
+    ฟังก์ชันสำหรับแสดงข้อมูล VLAN สรุป (show vlan brief) สำหรับ Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    
-    # ใช้คำสั่ง show version เพื่อตรวจสอบว่าเป็น Router หรือ Switch
-    version_output = net_connect.send_command('show version')
 
-    # ตรวจสอบว่าผลลัพธ์มีคำว่า 'vios_l2' ซึ่งบ่งบอกว่าเป็น Switch
+    # ตรวจสอบว่าเป็น Switch หรือไม่
+    version_output = net_connect.send_command('show version')
     if 'vios_l2' in version_output:
-        # ถ้าเป็น Switch ให้แสดงผลลัพธ์ของคำสั่ง show vlan brief
+        # ถ้าเป็น Switch แสดงข้อมูล VLAN
         output = net_connect.send_command('show vlan brief')
     else:
-        # ถ้าไม่ใช่ Switch ให้แสดงข้อความว่าไม่ใช่ Switch
+        # ถ้าไม่ใช่ แสดงข้อความแจ้งเตือน
         output = 'You are not connected to a Switch. VLAN information is not available.'
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('show_commands.html', output=output, hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    return render_template('show_commands.html', output=output,hostname=hostname)
+        return f'<h1>Error Showing VLAN Brief</h1><p>{str(e)}</p>'
+
+# ฟังก์ชันสำหรับจัดการการกลับไปยังหน้า command_center
 
 @app.route('/back', methods=['POST'])
 def back():
@@ -284,60 +317,79 @@ def back():
 
 @app.route('/command_center')
 def command_center():
+    """
+    ฟังก์ชันสำหรับแสดงหน้า command_center.html
+    """
     global net_connect
     if not net_connect:
         return redirect(url_for('index'))
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('command_center.html', output="", hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
+        print(f"Error: {e}")
+        return '<h1>Error</h1>'
 
-    return render_template('command_center.html', output="", hostname=hostname)
-
+# ฟังก์ชันสำหรับแสดงหน้า show_commands.html
 
 @app.route('/show_commands', methods=['GET'])
 def show_commands():
+    """
+    ฟังก์ชันสำหรับแสดงหน้า show_commands.html
+    """
     global net_connect
     if not net_connect:
         return redirect(url_for('index'))
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('show_commands.html', output="", hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    return render_template('show_commands.html', output="", hostname=hostname)
+        print(f"Error: {e}")
+        return '<h1>Error</h1>'
 
 @app.route('/all_config', methods=['GET'])
 def all_config():
+    """
+    ฟังก์ชันสำหรับแสดงหน้า all_config.html
+    """
     global net_connect
     if not net_connect:
         return redirect(url_for('index'))
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('all_config.html', output="", hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    return render_template('all_config.html', output="", hostname=hostname)
+        print(f"Error: {e}")
+        return '<h1>Error</h1>'
+
+# ฟังก์ชันสำหรับจัดการคำสั่ง erase และ reload อุปกรณ์
 
 def erase_and_reload_router():
-    """ฟังก์ชันนี้ทำงานใน Background เพื่อ Erase และ Reload Router"""
+    """
+    ฟังก์ชันที่รันใน background สำหรับลบการตั้งค่าและรีโหลดอุปกรณ์
+    """
     global net_connect
     try:
+        # ส่งคำสั่ง 'write erase' เพื่อลบการตั้งค่า
         output = net_connect.send_command_timing('write erase')
         time.sleep(2)
 
+        # ตรวจสอบว่าต้องยืนยันการลบหรือไม่
         if 'Erasing the nvram filesystem' in output or 'Continue? [confirm]' in output:
             output += net_connect.send_command_timing('\n')
             time.sleep(2)
 
+        # ส่งคำสั่ง 'reload' เพื่อรีโหลดอุปกรณ์
         reload_output = net_connect.send_command_timing('reload')
         time.sleep(2)
 
+        # จัดการกับข้อความยืนยันต่างๆ
         if 'System configuration has been modified. Save? [yes/no]:' in reload_output:
             reload_output += net_connect.send_command_timing('no\n')
             time.sleep(2)
@@ -350,7 +402,7 @@ def erase_and_reload_router():
             reload_output += "\nReload command failed due to restrictions on Telnet/SSH sessions.\n"
             reload_output += "Please manually reload the router using the console connection."
 
-        print(output + reload_output)  # Log output สำหรับ debugging
+        print(output + reload_output)  # สำหรับ debugging
     except Exception as e:
         print(f"Error during erase/reload: {str(e)}")
     finally:
@@ -359,80 +411,86 @@ def erase_and_reload_router():
 
 @app.route('/erase_router', methods=['POST'])
 def erase_router():
+    """
+    ฟังก์ชันสำหรับเรียกใช้การลบการตั้งค่าและรีโหลดอุปกรณ์
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
 
+    # รันฟังก์ชัน erase_and_reload_router ใน thread แยก
     threading.Thread(target=erase_and_reload_router).start()
-    return render_template('all_config.html', 
-                           output="Erase command sent. Router is reloading...")
+    return render_template('all_config.html', output="Erase command sent. Router is reloading...")
+
+# ฟังก์ชันสำหรับจัดการการตั้งค่าอินเทอร์เฟซของ Router และ Switch
 
 @app.route('/apply_router_interface_config', methods=['POST'])
 def apply_router_interface_config():
+    """
+    ฟังก์ชันสำหรับตั้งค่า IP Address ให้กับอินเทอร์เฟซของ Router
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    
+
     interface = request.form['interface']
     ip_address = request.form['ip_address']
     subnet_mask = request.form['subnet_mask']
-    
+
     commands = [
         f"interface {interface}",
-        "no ip address",  # ลบ IP เดิม (ถ้ามี)
+        "no ip address",  # ลบ IP เดิม
         f"ip address {ip_address} {subnet_mask}",
         "no shutdown",
         "exit",
     ]
     try:
-        interfaces = get_interfaces() 
+        interfaces = get_interfaces()
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_config_set(commands)
         prompt = net_connect.find_prompt()
-        return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname,interfaces=interfaces)
+        return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Applying Router Interface Config</h1><p>{str(e)}</p>'
 
-
 @app.route('/apply_switch_interface_config', methods=['POST'])
 def apply_switch_interface_config():
+    """
+    ฟังก์ชันสำหรับตั้งค่า IP Address ให้กับอินเทอร์เฟซของ Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    
+
     interface = request.form['interface']
     ip_address = request.form['ip_address']
     subnet_mask = request.form['subnet_mask']
-    
+
     commands = [
         f"interface {interface}",
-        "no switchport",  # Remove switchport to enable IP
+        "no switchport",  # เปลี่ยนอินเทอร์เฟซเป็น Layer 3
         f"ip address {ip_address} {subnet_mask}",
         "no shutdown",
         "exit"
     ]
     try:
-        interfaces = get_interfaces() 
+        interfaces = get_interfaces()
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
+        print(f"Hostname: {hostname}")
 
-    try:
         output = net_connect.send_config_set(commands)
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname,interfaces=interfaces)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Applying Switch Interface Config</h1><p>{str(e)}</p>'
 
-
 @app.route('/remove_router_ip_interface', methods=['POST'])
 def remove_router_ip_interface():
-    """ลบ IP Address ออกจากอินเทอร์เฟซของ Router"""
+    """
+    ฟังก์ชันสำหรับลบ IP Address ออกจากอินเทอร์เฟซของ Router
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
@@ -446,21 +504,20 @@ def remove_router_ip_interface():
     ]
     try:
         hostname = get_hostname()
-        interfaces = get_interfaces() 
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        interfaces = get_interfaces()
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_config_set(commands)
         prompt = net_connect.find_prompt()
-        return render_template('conf_router.html', output=output, prompt=prompt,hostname=hostname,interfaces=interfaces)
+        return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Removing Router IP Address</h1><p>{str(e)}</p>'
 
-
 @app.route('/remove_switch_ip_interface', methods=['POST'])
 def remove_switch_ip_interface():
-    """ลบ IP Address ออกจากอินเทอร์เฟซของ Switch"""
+    """
+    ฟังก์ชันสำหรับลบ IP Address ออกจากอินเทอร์เฟซของ Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
@@ -474,46 +531,50 @@ def remove_switch_ip_interface():
     ]
     try:
         hostname = get_hostname()
-        interfaces = get_interfaces() 
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
+        interfaces = get_interfaces()
+        print(f"Hostname: {hostname}")
 
-    try:
         output = net_connect.send_config_set(commands)
         output += "\n" + net_connect.send_command(f"show ip interface brief | include {interface}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Removing Switch IP Address</h1><p>{str(e)}</p>'
-    
+
+# ฟังก์ชันสำหรับการจัดการ IP Route
+
 @app.route('/ip_route')
 def ip_route():
+    """
+    ฟังก์ชันสำหรับแสดงหน้า ip_route.html สำหรับการตั้งค่า Static Route
+    """
     global net_connect
     if not net_connect:
         return redirect(url_for('index'))
 
     try:
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('ip_route.html', hostname=hostname)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    return render_template('ip_route.html', hostname=hostname)
+        print(f"Error: {e}")
+        return '<h1>Error</h1>'
 
 @app.route('/submit_ip_route', methods=['POST'])
 def submit_ip_route():
-    global net_connect  # Use the global connection established earlier
+    """
+    ฟังก์ชันสำหรับเพิ่ม Static Route
+    """
+    global net_connect
     if not net_connect:
-        return '<h1>Not connected</h1>'  # Ensure we are connected to the device
+        return '<h1>Not connected</h1>'
 
     network = request.form['network']
     subnet_mask = request.form['subnet_mask']
     nexthop = request.form['nexthop']
-    
+
     # สร้างคำสั่งสำหรับเพิ่ม route
     route_command = f"ip route {network} {subnet_mask} {nexthop}"
-
-    output = ""
 
     try:
         # เข้าสู่โหมด configuration
@@ -521,21 +582,22 @@ def submit_ip_route():
 
         # ส่งคำสั่งไปยังอุปกรณ์
         output = net_connect.send_config_set(route_command)
-
-        # ถ้าไม่มีข้อผิดพลาดเกิดขึ้น แสดงผลลัพธ์
         output = f"Route added: {network}/{subnet_mask} via {nexthop}\n{output}"
 
+        hostname = get_hostname()
+        print(f"Hostname: {hostname}")
+        return render_template('ip_route.html', output=output, hostname=hostname)
     except Exception as e:
         output = f"Failed to add route: {str(e)}"
-    try:
-        hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    return render_template('ip_route.html', output=output, hostname=hostname)
+        return render_template('ip_route.html', output=output)
+
+# ฟังก์ชันสำหรับการตั้งค่า Router และ Switch
 
 @app.route('/conf_router', methods=['GET'])
 def conf_router():
+    """
+    ฟังก์ชันสำหรับแสดงหน้า conf_router.html สำหรับตั้งค่า Router
+    """
     global net_connect
     if not net_connect:
         return redirect(url_for('index'))
@@ -543,14 +605,17 @@ def conf_router():
     try:
         hostname = get_hostname()
         interfaces = get_interfaces()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        print(f"Hostname: {hostname}")
+        return render_template('conf_router.html', hostname=hostname, interfaces=interfaces)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-
-    return render_template('conf_router.html', hostname=hostname, interfaces=interfaces)
+        print(f"Error: {e}")
+        return '<h1>Error</h1>'
 
 @app.route('/conf_switch', methods=['GET'])
 def conf_switch():
+    """
+    ฟังก์ชันสำหรับแสดงหน้า conf_switch.html สำหรับตั้งค่า Switch
+    """
     global net_connect
     if not net_connect:
         return redirect(url_for('index'))
@@ -558,14 +623,20 @@ def conf_switch():
     try:
         vlan_ids = get_vlan_ids()
         hostname = get_hostname()
-        interfaces = get_interfaces()  
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
+        interfaces = get_interfaces()
+        print(f"Hostname: {hostname}")
+        return render_template('conf_switch.html', hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    return render_template('conf_switch.html', hostname=hostname, interfaces=interfaces,vlan_ids=vlan_ids)
+        print(f"Error: {e}")
+        return '<h1>Error</h1>'
+
+# ฟังก์ชันสำหรับจัดการ VLAN บน Switch
 
 @app.route('/add_vlan', methods=['POST'])
 def add_vlan():
+    """
+    ฟังก์ชันสำหรับเพิ่ม VLAN บน Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
@@ -584,50 +655,49 @@ def add_vlan():
     ]
     try:
         vlan_ids = get_vlan_ids()
-        interfaces = get_interfaces() 
+        interfaces = get_interfaces()
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
-        # ส่งคำสั่งสำหรับเพิ่ม VLAN
+        print(f"Hostname: {hostname}")
+
         net_connect.send_config_set(commands)
-        output = net_connect.send_config_set(commands)
-        output += net_connect.send_command(f"show vlan brief | include {vlan_id}")
+        output = net_connect.send_command(f"show vlan brief | include {vlan_id}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Adding VLAN</h1><p>{str(e)}</p>'
 
-
 @app.route('/remove_vlan', methods=['POST'])
 def remove_vlan():
+    """
+    ฟังก์ชันสำหรับลบ VLAN บน Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
-    
+
     vlan_id = request.form['vlan_id']
-    
+
     commands = [
         f"no vlan {vlan_id}"
     ]
     try:
         vlan_ids = get_vlan_ids()
-        interfaces = get_interfaces() 
+        interfaces = get_interfaces()
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_config_set(commands)
-        output += net_connect.send_command(f"show vlan brief")
+        output += net_connect.send_command("show vlan brief")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
-        return f'<h1>Error Remove Vlan</h1><p>{str(e)}</p>'
+        return f'<h1>Error Removing VLAN</h1><p>{str(e)}</p>'
 
 @app.route('/add_ip_vlan', methods=['POST'])
 def add_ip_vlan():
+    """
+    ฟังก์ชันสำหรับเพิ่ม IP Address ให้กับ VLAN Interface บน Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
@@ -644,21 +714,22 @@ def add_ip_vlan():
     ]
     try:
         vlan_ids = get_vlan_ids()
-        interfaces = get_interfaces() 
+        interfaces = get_interfaces()
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_config_set(commands)
         output += net_connect.send_command(f"show ip interface brief | include Vlan{vlan_id}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Adding IP to VLAN</h1><p>{str(e)}</p>'
 
 @app.route('/add_port_to_vlan', methods=['POST'])
 def add_port_to_vlan():
+    """
+    ฟังก์ชันสำหรับเพิ่มพอร์ตเข้าไปใน VLAN บน Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
@@ -674,84 +745,86 @@ def add_port_to_vlan():
     ]
     try:
         vlan_ids = get_vlan_ids()
-        interfaces = get_interfaces() 
+        interfaces = get_interfaces()
         hostname = get_hostname()
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_config_set(commands)
         output += net_connect.send_command(f"show vlan brief | include {vlan_id}")
         prompt = net_connect.find_prompt()
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Adding Port to VLAN</h1><p>{str(e)}</p>'
 
 # ฟังก์ชันสำหรับแสดง VLANs ในหน้า conf_switch
+
 @app.route('/show_vlans', methods=['POST'])
 def show_vlans():
+    """
+    ฟังก์ชันสำหรับแสดง VLAN ทั้งหมดบน Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
     try:
         vlan_ids = get_vlan_ids()
         hostname = get_hostname()
-        interfaces = get_interfaces() 
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
-        # ส่งคำสั่ง 'show vlan brief' ไปยังอุปกรณ์
+        interfaces = get_interfaces()
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_command('show vlan brief')
         prompt = net_connect.find_prompt()
-        # ส่งผลลัพธ์ไปยังหน้า conf_switch.html และใช้ตัวแปร combined_output
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces,vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Showing VLANs</h1><p>{str(e)}</p>'
 
 # ฟังก์ชันสำหรับแสดง interfaces ในหน้า conf_switch
+
 @app.route('/show_interfaces_switch', methods=['POST'])
 def show_interfaces_switch():
+    """
+    ฟังก์ชันสำหรับแสดงอินเทอร์เฟซบน Switch
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
     try:
         vlan_ids = get_vlan_ids()
         hostname = get_hostname()
-        interfaces = get_interfaces() 
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
-        # ส่งคำสั่ง 'show interfaces' ไปยังอุปกรณ์
+        interfaces = get_interfaces()
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_command('show ip interface brief')
         prompt = net_connect.find_prompt()
-        # ส่งผลลัพธ์ไปยังหน้า conf_switch.html และใช้ตัวแปร combined_output
-        return render_template('conf_switch.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
+        return render_template('conf_switch.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces, vlan_ids=vlan_ids)
     except Exception as e:
         return f'<h1>Error Showing Interfaces</h1><p>{str(e)}</p>'
 
 @app.route('/show_interfaces_router', methods=['POST'])
 def show_interfaces_router():
+    """
+    ฟังก์ชันสำหรับแสดงอินเทอร์เฟซบน Router
+    """
     global net_connect
     if not net_connect:
         return '<h1>Not connected</h1>'
     try:
         hostname = get_hostname()
-        interfaces = get_interfaces() 
-        print(f"Hostname: {hostname}")  # แสดง hostname ใน console
-    except Exception as e:
-        print(f"Error: {e}")  # แสดง error ถ้ามี
-    try:
-        # ส่งคำสั่ง 'show interfaces' ไปยังอุปกรณ์
+        interfaces = get_interfaces()
+        print(f"Hostname: {hostname}")
+
         output = net_connect.send_command('show ip interface brief')
         prompt = net_connect.find_prompt()
-        # ส่งผลลัพธ์ไปยังหน้า con_router.html และใช้ตัวแปร combined_output
-        return render_template('conf_router.html', output=output, prompt=prompt,hostname=hostname, interfaces=interfaces)
+        return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Showing Interfaces</h1><p>{str(e)}</p>'
 
+# ฟังก์ชันสำหรับดึงข้อมูลอินเทอร์เฟซและ VLAN
+
 def get_interfaces():
+    """
+    ฟังก์ชันสำหรับดึงรายการอินเทอร์เฟซจากอุปกรณ์
+    """
     global net_connect
     try:
         output = net_connect.send_command("show ip interface brief")
@@ -768,6 +841,9 @@ def get_interfaces():
         return []
 
 def get_vlan_ids():
+    """
+    ฟังก์ชันสำหรับดึงรายการ VLAN IDs จากอุปกรณ์
+    """
     try:
         output = net_connect.send_command("show vlan brief")
         vlan_lines = output.splitlines()
@@ -776,48 +852,13 @@ def get_vlan_ids():
             if line and "VLAN" not in line:  # ข้ามบรรทัดที่มีคำว่า "VLAN"
                 parts = line.split()
                 if len(parts) > 0:
-                    vlan_ids.append(parts[0])  # แค่เก็บ VLAN ID
+                    vlan_ids.append(parts[0])  # เก็บ VLAN ID
         return vlan_ids
     except Exception as e:
         print(f"Error retrieving VLAN IDs: {e}")
         return []
 
-def validate_input(add_ip, delay):
-    """Validate IP address and delay factor."""
-    # Basic IP address validation (could be extended to use regex)
-    if not add_ip or len(add_ip.split('.')) != 4:
-        return False, "Invalid IP address format."
-    
-    # Validate delay factor
-    try:
-        delay = float(delay)
-        if delay <= 0:
-            return False, "Delay factor must be greater than 0."
-    except ValueError:
-        return False, "Invalid delay factor. Must be a number."
-    
-    return True, None
-
-
-def get_router_details():
-    """Retrieve the hostname or router prompt details."""
-    try:
-        hostname = get_hostname()  # Function to get hostname of router
-        prompt = net_connect.find_prompt()  # Get router prompt
-        return hostname, prompt, None
-    except Exception as e:
-        return None, None, str(e)  # Return error message if hostname fetching fails
-
-
-
-#@app.route('/cli')
-#def cli():
-#    global net_connect
-#    if not net_connect:
-#        return redirect(url_for('index'))
-
-#    prompt = net_connect.find_prompt()
-#    return render_template('cli.html', output="", prompt=prompt)
+# ฟังก์ชันหลักในการรันแอปพลิเคชัน
 
 if __name__ == '__main__':
     app.run(debug=True)
