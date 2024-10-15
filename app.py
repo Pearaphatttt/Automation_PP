@@ -8,26 +8,6 @@ app = Flask(__name__)
 # ตัวแปร global สำหรับเก็บการเชื่อมต่อ SSH
 net_connect = None
 
-def get_hostname():
-    """
-    ฟังก์ชันสำหรับดึง hostname ของอุปกรณ์เครือข่าย
-    """
-    global net_connect
-    try:
-        # ส่งคำสั่ง 'show running-config' เพื่อดึงข้อมูลการตั้งค่าปัจจุบัน
-        output = net_connect.send_command("show running-config")
-        print("Output of show running-config:")
-        print(output)  # แสดงผลลัพธ์ใน console
-
-        lines = output.splitlines()
-        # หา line ที่มีคำว่า 'hostname' เพื่อดึงชื่อ hostname
-        hostname_line = next((line for line in lines if line.startswith("hostname")), None)
-        hostname = hostname_line.split()[-1] if hostname_line else "Unknown"
-        return hostname
-    except Exception as e:
-        print(f"Error getting hostname: {e}")
-        return "Unknown"
-
 @app.route('/', methods=['GET'])
 def index():
     """
@@ -818,6 +798,27 @@ def show_interfaces_router():
         return render_template('conf_router.html', output=output, prompt=prompt, hostname=hostname, interfaces=interfaces)
     except Exception as e:
         return f'<h1>Error Showing Interfaces</h1><p>{str(e)}</p>'
+
+def get_hostname():
+    """
+    ฟังก์ชันสำหรับดึง hostname ของอุปกรณ์เครือข่าย
+    """
+    global net_connect
+    try:
+        # ส่งคำสั่ง 'show running-config' เพื่อดึงข้อมูลการตั้งค่าปัจจุบัน
+        output = net_connect.send_command("show running-config")
+        print("Output of show running-config:")
+        print(output)  # แสดงผลลัพธ์ใน console
+
+        lines = output.splitlines()
+        # หา line ที่มีคำว่า 'hostname' เพื่อดึงชื่อ hostname
+        hostname_line = next((line for line in lines if line.startswith("hostname")), None)
+        hostname = hostname_line.split()[-1] if hostname_line else "Unknown"
+        return hostname
+    except Exception as e:
+        print(f"Error getting hostname: {e}")
+        return "Unknown"
+
 
 # ฟังก์ชันสำหรับดึงข้อมูลอินเทอร์เฟซและ VLAN
 
